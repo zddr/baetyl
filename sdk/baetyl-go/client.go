@@ -9,10 +9,16 @@ import (
 	"github.com/baetyl/baetyl/protocol/http"
 )
 
-// Client client of api server
-type Client struct {
+// HTTPClient client of http server
+// Deprecated: Use api.Client instead.
+type HTTPClient struct {
 	cli *http.Client
 	ver string
+}
+
+// Client client of api server
+type Client struct {
+	*HTTPClient
 }
 
 // NewEnvClient creates a new client by env
@@ -36,11 +42,18 @@ func NewEnvClient() (*Client, error) {
 		Username: name,
 		Password: token,
 	}
-	return NewClient(c, version)
+	cli, err := NewClient(c, version)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		HTTPClient: cli,
+	}, nil
 }
 
 // NewClient creates a new client
-func NewClient(c http.ClientInfo, ver string) (*Client, error) {
+func NewClient(c http.ClientInfo, ver string) (*HTTPClient, error) {
 	cli, err := http.NewClient(c)
 	if err != nil {
 		return nil, err
@@ -48,21 +61,10 @@ func NewClient(c http.ClientInfo, ver string) (*Client, error) {
 	if ver != "" && !strings.HasPrefix(ver, "/") {
 		ver = "/" + ver
 	}
-	return &Client{
+	return &HTTPClient{
 		cli: cli,
 		ver: ver,
 	}, nil
-}
-
-// InspectSystem inspect all stats
-func (c *Client) InspectSystem() (*Inspect, error) {
-	body, err := c.cli.Get(c.ver + "/system/inspect")
-	if err != nil {
-		return nil, err
-	}
-	s := new(Inspect)
-	err = json.Unmarshal(body, s)
-	return s, err
 }
 
 // UpdateSystem updates and reloads config
@@ -78,6 +80,17 @@ func (c *Client) UpdateSystem(trace, tp, path string) error {
 	}
 	_, err = c.cli.Put(data, c.ver+"/system/update")
 	return err
+}
+
+// InspectSystem inspect all stats
+func (c *Client) InspectSystem() (*Inspect, error) {
+	body, err := c.cli.Get(c.ver + "/system/inspect")
+	if err != nil {
+		return nil, err
+	}
+	s := new(Inspect)
+	err = json.Unmarshal(body, s)
+	return s, err
 }
 
 // GetAvailablePort gets available port

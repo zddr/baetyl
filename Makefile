@@ -13,7 +13,8 @@ GO_OS:=$(shell go env GOOS)
 GO_ARCH:=$(shell go env GOARCH)
 GO_ARM:=$(shell go env GOARM)
 GO_FLAGS?=-ldflags "-X 'github.com/baetyl/baetyl/cmd.Revision=$(GIT_REV)' -X 'github.com/baetyl/baetyl/cmd.Version=$(VERSION)'"
-GO_TEST_FLAGS?=
+GO_FLAGS_STATIC=-ldflags '-X "github.com/baetyl/baetyl/cmd.Revision=$(GIT_REV)" -X "github.com/baetyl/baetyl/cmd.Version=$(VERSION)"  -linkmode external -w -extldflags "-static"'
+GO_TEST_FLAGS?=-race -short -covermode=atomic -coverprofile=coverage.out
 GO_TEST_PKGS?=$(shell go list ./... | grep -v baetyl-video-infer)
 
 ifndef PLATFORMS
@@ -53,13 +54,22 @@ $(OUTPUT_PKGS):
 	@cd $(dir $@) && zip -q -r $(notdir $@) bin 
 
 $(OUTPUT_MODS):
-	@make -C $@
+	@${MAKE} -C $@
+
+.PHONY: build
+build: $(SRC_FILES)
+	@echo "BUILD baetyl"
+ifneq ($(GO_OS),darwin)
+	@CGO_ENABLED=1 go build -o baetyl $(GO_FLAGS_STATIC) .
+else
+	@CGO_ENABLED=1 go build -o baetyl $(GO_FLAGS) .
+endif
 
 .PHONY: image $(IMAGE_MODS)
 image: $(IMAGE_MODS) 
 
 $(IMAGE_MODS):
-	@make -C $(notdir $@) image
+	@${MAKE} -C $(notdir $@) image
 
 .PHONY: rebuild
 rebuild: clean all
@@ -69,7 +79,7 @@ test:
 	@cd baetyl-function-node8 && npm install && cd -
 	@cd baetyl-function-python2 && pip install -r requirements.txt && cd -
 	@cd baetyl-function-python3 && pip3 install -r requirements.txt && cd -
-	@go test ${GO_TEST_FLAGS} -coverprofile=coverage.out ${GO_TEST_PKGS}
+	@go test ${GO_TEST_FLAGS} ${GO_TEST_PKGS}
 	@go tool cover -func=coverage.out | grep total
 
 .PHONY: install $(NATIVE_MODS)
@@ -77,7 +87,7 @@ install: all
 	@install -d -m 0755 ${PREFIX}/bin
 	@install -m 0755 $(OUTPUT)/$(if $(GO_ARM),$(GO_OS)/$(GO_ARCH)/$(GO_ARM),$(GO_OS)/$(GO_ARCH))/baetyl/bin/baetyl ${PREFIX}/bin/
 ifeq ($(MODE),native)
-	@make $(NATIVE_MODS)
+	@${MAKE} $(NATIVE_MODS)
 endif
 	@tar cf - -C example/$(MODE) etc var | tar xvf - -C ${PREFIX}/
 

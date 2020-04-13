@@ -10,7 +10,6 @@ import (
 	"github.com/baetyl/baetyl/logger"
 	"github.com/baetyl/baetyl/master/api"
 	"github.com/baetyl/baetyl/master/engine"
-	"github.com/baetyl/baetyl/protocol/http"
 	baetyl "github.com/baetyl/baetyl/sdk/baetyl-go"
 	cmap "github.com/orcaman/concurrent-map"
 )
@@ -35,6 +34,7 @@ func New(pwd string, cfg Config, ver string, revision string) (*Master, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to make db directory: %s", err.Error())
 	}
+
 	log := logger.InitLogger(cfg.Logger, "baetyl", "master")
 	m := &Master{
 		cfg:       cfg,
@@ -47,6 +47,7 @@ func New(pwd string, cfg Config, ver string, revision string) (*Master, error) {
 		infostats: newInfoStats(pwd, cfg.Mode, ver, revision, path.Join(baetyl.DefaultDBDir, baetyl.AppStatsFileName)),
 	}
 	log.Infof("mode: %s; grace: %d; pwd: %s; api: %s", cfg.Mode, cfg.Grace, pwd, cfg.Server.Address)
+
 	opts := engine.Options{
 		Grace:      cfg.Grace,
 		Pwd:        pwd,
@@ -58,20 +59,17 @@ func New(pwd string, cfg Config, ver string, revision string) (*Master, error) {
 		return nil, err
 	}
 	log.Infoln("engine started")
-	sc := http.ServerInfo{
-		Address:     m.cfg.Server.Address,
-		Timeout:     m.cfg.Server.Timeout,
-		Certificate: m.cfg.Server.Certificate,
-	}
-	m.server, err = api.New(sc, m)
+	m.server, err = api.New(m.cfg.Server, m)
 	if err != nil {
 		m.Close()
 		return nil, err
 	}
 	log.Infoln("server started")
+
 	// TODO: implement recover logic when master restarts
 	// Now it will stop all old services
 	m.engine.Recover()
+
 	// start application
 	err = m.UpdateAPP("", "")
 	if err != nil {
